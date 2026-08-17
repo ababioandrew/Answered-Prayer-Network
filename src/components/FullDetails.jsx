@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import "./FullDetails.css";
 
@@ -13,6 +14,7 @@ const initialFormData = {
 };
 
 const FullDetails = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState(initialFormData);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -182,8 +184,19 @@ const FullDetails = () => {
   return (
     <div className="membership-details-container">
       <div className="membership-details-card">
-        <h2>Membership Details</h2>
-
+        <div className="card-header">
+          <h3>Membership Details</h3>
+          <button 
+            className="dashboard-nav-btn"
+            onClick={() => navigate("/MembersDashboard")}
+            type="button"
+          >
+            <svg className="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
+            <span>Dashboard</span>
+          </button>
+        </div>
         <form onSubmit={handleSubmit} noValidate>
 
           {/* Full Name */}

@@ -1,6 +1,6 @@
-# Camsey Consulting Website
+# Answered Prayer Network Website
 
-A professional React website for Camsey Consulting — Expert Legal & Business Consultancy.
+A professional React website for Answered Prayer Network — Expert Legal & Business Consultancy.
 
 ## Color Scheme
 - **Navy:** `#1a2744` (primary)

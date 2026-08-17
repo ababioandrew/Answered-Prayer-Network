@@ -1,3 +1,14 @@
+/* ================================
+   CSS VARIABLES (DEFINED)
+================================ */
+
+:root {
+  --white: #ffffff;
+  --navy: #111c35;
+  --gold: #c9a84c;
+  --light-gray: #e5e5e5;
+}
+
 .membership-details-container {
   position: fixed;
   top: 0;
@@ -8,13 +19,13 @@
 
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
 
-  padding: 0;
+  padding: 30px 20px;
 
   background: #faf9f6;
 
-  overflow: hidden;
+  overflow-y: auto;
 
   box-sizing: border-box;
 }
@@ -28,7 +39,7 @@
   width: 100%;
   max-width: 900px;
 
-  margin: 0;
+  margin: 20px auto;
   padding: 38px 42px;
 
   box-sizing: border-box;
@@ -38,11 +49,30 @@
   border: 1px solid var(--light-gray, #e5e5e5);
 
   box-shadow:
-    0 5px 25px rgba(0, 0, 0, 0.06);
+    0 5px 25px rgba(0, 0, 0, 0.08);
 
-  border-radius: 4px;
+  border-radius: 8px;
 
-  overflow: hidden;
+  overflow: visible;
+}
+
+
+/* ================================
+   CARD HEADER
+================================ */
+
+.card-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  margin-bottom: 30px;
+
+  padding-bottom: 20px;
+
+  border-bottom: 3px solid var(--gold, #c9a84c);
+
+  position: relative;
 }
 
 
@@ -51,19 +81,88 @@
 ================================ */
 
 .membership-details-card h2 {
-  margin: 0 0 30px;
-
-  text-align: center;
+  margin: 0;
 
   font-family: "Playfair Display", serif;
 
   color: var(--navy, #111c35);
 
-  font-size: 30px;
+  font-size: 34px;
 
-  font-weight: 700;
+  font-weight: 800;
 
   line-height: 1.2;
+
+  letter-spacing: 0.5px;
+
+  text-transform: uppercase;
+
+  text-align: center;
+
+  flex: 1;
+}
+
+
+/* ================================
+   DASHBOARD NAV BUTTON
+================================ */
+
+.dashboard-nav-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  padding: 4px 10px 4px 8px;
+
+  border: 1.5px solid var(--gold, #c9a84c);
+  border-radius: 20px;
+
+  background: transparent;
+
+  color: var(--navy, #111c35);
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  white-space: nowrap;
+
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    transform 0.2s ease,
+    box-shadow 0.25s ease;
+}
+
+.dashboard-nav-btn:hover {
+  background: var(--gold, #c9a84c);
+
+  color: #ffffff;
+
+  box-shadow: 0 2px 8px rgba(201, 168, 76, 0.3);
+}
+
+
+/* ================================
+   DASHBOARD ICON
+================================ */
+
+.dashboard-icon {
+  width: 14px;
+  height: 14px;
+
+  flex-shrink: 0;
+
+  display: block;
+
+  stroke: currentColor;
 }
 
 
@@ -482,17 +581,17 @@
 @media (max-width: 1000px) {
 
   .membership-details-container {
-    padding: 50px 30px;
+    padding: 25px 20px;
   }
 
   .membership-details-card {
     max-width: 820px;
 
-    padding: 35px;
+    padding: 32px 35px;
   }
 
   .membership-details-card h2 {
-    font-size: 28px;
+    font-size: 30px;
   }
 
   .membership-details-card form {
@@ -509,26 +608,23 @@
 @media (max-width: 900px) {
 
   .membership-details-container {
-    padding: 45px 24px;
+    padding: 20px 15px;
   }
 
   .membership-details-card {
     max-width: 760px;
 
-    padding: 32px;
+    padding: 28px 30px;
   }
 
   .membership-details-card h2 {
-    font-size: 26px;
-
-    margin-bottom: 26px;
+    font-size: 28px;
   }
 
-  /*
-    Keep the same 45px height.
-    This prevents the selected gender
-    from being clipped.
-  */
+  .card-header {
+    margin-bottom: 25px;
+    padding-bottom: 18px;
+  }
 
   .form-group input,
   .form-group select {
@@ -545,7 +641,7 @@
 @media (max-width: 600px) {
 
   .membership-details-container {
-    padding: 30px 20px;
+    padding: 12px;
   }
 
   .membership-details-card {
@@ -553,15 +649,35 @@
 
     max-width: 100%;
 
-    padding: 28px 20px;
+    padding: 20px 16px;
 
-    border-radius: 4px;
+    border-radius: 6px;
+
+    margin: 10px auto;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+
+    margin-bottom: 20px;
+    padding-bottom: 15px;
   }
 
   .membership-details-card h2 {
     font-size: 24px;
+    text-align: center;
+  }
 
-    margin-bottom: 24px;
+  .dashboard-nav-btn {
+    position: relative;
+    right: auto;
+    top: auto;
+    transform: none;
+
+    padding: 4px 12px 4px 10px;
+    font-size: 11px;
   }
 
   .membership-details-card form {
@@ -596,17 +712,20 @@
 @media (max-width: 400px) {
 
   .membership-details-container {
-    padding: 20px 12px;
+    padding: 8px;
   }
 
   .membership-details-card {
-    padding: 24px 16px;
+    padding: 16px 12px;
   }
 
   .membership-details-card h2 {
-    font-size: 22px;
+    font-size: 20px;
+  }
 
-    margin-bottom: 20px;
+  .card-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
   }
 
   .form-group label {
@@ -622,6 +741,16 @@
   .form-group input,
   .form-group select {
     height: 40px;
+  }
+
+  .dashboard-nav-btn {
+    font-size: 10px;
+    padding: 3px 10px 3px 8px;
+  }
+
+  .dashboard-icon {
+    width: 12px;
+    height: 12px;
   }
 
 }

@@ -80,7 +80,7 @@ export default function Contact() {
             </span>
 
             <span>
-              camseycon@gmail.com
+              Answeredprayernetwork@gmail.com
             </span>
 
           </div>
@@ -216,7 +216,7 @@ export default function Contact() {
                   </p>
 
                   <p className="ci-value">
-                    camseycon@gmail.com
+                    Answeredprayernetwork@gmail.com
                   </p>
 
                 </div>
