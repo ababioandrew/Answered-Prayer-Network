@@ -1,6 +1,3 @@
-//=====================================================
-// IMPORTS
-//=====================================================
 
 import express from "express";
 import nodemailer from "nodemailer";
@@ -117,81 +114,52 @@ console.log("✅ SMTP server is ready to send emails.");
 }
 });
 
-//=====================================================
-// POSTGRESQL
-//=====================================================
-
-let pool;
-
-if (process.env.DATABASE_URL) {
-// ---------------------------------------------------
-// NEON / CLOUD POSTGRESQL
-// ---------------------------------------------------
-
-pool= new Pool({
+let pool = new Pool({
 connectionString: process.env.DATABASE_URL,
-
-ssl: {
-rejectUnauthorized: false,
-},
+ssl: { rejectUnauthorized: false},
+max: 5,
+idleTimeoutMillis: 30000,
+connectionTimeoutMillis: 10000
 });
 
-console.log("🔗 PostgreSQL configured using DATABASE_URL");
-} else {
-// ---------------------------------------------------
-// LOCAL POSTGRESQL
-// ---------------------------------------------------
+// let pool;
+// if (process.env.DATABASE_URL) {
+// pool= new Pool({
+// connectionString: process.env.DATABASE_URL,
+// ssl: {rejectUnauthorized: false},
+// });
+// console.log("🔗 PostgreSQL configured using DATABASE_URL");
+// }else {
+// pool= new Pool({
+// user: process.env.DB_USER,
+// host: process.env.DB_HOST,
+// database: process.env.DB_NAME,
+// password: process.env.DB_PASS,
+// port: Number(process.env.DB_PORT) || 5432,
+// });
 
-pool= new Pool({
-user: process.env.DB_USER,
-host: process.env.DB_HOST,
-database: process.env.DB_NAME,
-password: process.env.DB_PASS,
-port: Number(process.env.DB_PORT) || 5432,
-});
+// console.log("🔗 PostgreSQL configured using local DB variables");
+// }
 
-console.log("🔗 PostgreSQL configured using local DB variables");
-}
+let schemaReady = false;
+const createMembersTable = async () => {
+  if (schemaReady) return;
 
-//=====================================================
-// CREATE MEMBERS TABLE
-//=====================================================
-
-const createMembersTable= async ()=> {
-try {
-await pool.query(`
-CREATE TABLE IF NOT EXISTS members (
-id SERIAL PRIMARY KEY,
-
-"fullName" VARCHAR(100) NOT NULL,
-
-gender VARCHAR(20) NOT NULL,
-
-location VARCHAR(100),
-
-"dateOfBirth" DATE,
-
-"dateOfEntry" DATE NOT NULL,
-
-contacts VARCHAR(50),
-
-remarks TEXT,
-
-"createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-"updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-`);
-
-console.log("✅ Members table is ready");
-} catch (error) {
-console.error(
-"❌ Failed to create members table:",
-error.message
-);
-
-throw error;
-}
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS members (
+      id SERIAL PRIMARY KEY,
+      "fullName" VARCHAR(100) NOT NULL,
+      gender VARCHAR(20) NOT NULL,
+      location VARCHAR(100),
+      "dateOfBirth" DATE,
+      "dateOfEntry" DATE NOT NULL,
+      contacts VARCHAR(50),
+      remarks TEXT,
+      "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  schemaReady = true;
 };
 
 //=====================================================
@@ -716,6 +684,7 @@ error: error.message,
 }
 });
 
+
 app.use((req, res)=> {res.status(404).json({
 success: false, message: "Route not found"});
 });
@@ -729,62 +698,16 @@ error: error.message,
 });
 });
 
-const server= app.listen(PORT,
-async ()=> {console.log(`✅ Server running on http://localhost:${PORT}`);
-console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
-console.log(`🎬 Commercial API: http://localhost:${PORT}/api/commercial`);
+let initialized = false;
+async function initialize() {
+if (initialized) return;
+await connectDatabase();
+initialized = true;
+}
 
-try{await connectDatabase();
-}catch (error){console.error("❌ Server startup failed:",error.message);
-server.close(()=> {process.exit(1)});
-}
-}
-);
-
-server.on("error", (error)=> {
-if (error.code=== "EADDRINUSE"){
-console.error(`❌ Port ${PORT} is already in use.`);
-console.error(`Run: netstat -ano | findstr :${PORT}`);
-process.exit(1);
-}
-console.error("❌ Server error:",error);
+app.use(async (req, res, next) => {
+try {await initialize(); next();
+}catch(err){next(err)}
 });
 
-//=====================================================
-// GRACEFUL SHUTDOWN
-//=====================================================
-
-const shutdown= async ()=> {
-console.log(
-"🛑 Shutting down server..."
-);
-
-try {
-await pool.end();
-
-server.close(()=> {
-console.log(
-"✅ Server stopped"
-);
-
-process.exit(0);
-});
-} catch (error) {
-console.error(
-"❌ Shutdown error:",
-error
-);
-
-process.exit(1);
-}
-};
-
-process.on(
-"SIGINT",
-shutdown
-);
-
-process.on(
-"SIGTERM",
-shutdown
-);
+export default app;
