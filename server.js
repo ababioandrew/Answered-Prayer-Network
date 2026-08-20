@@ -1,4 +1,3 @@
-
 import express from "express";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
@@ -15,54 +14,23 @@ dotenv.config();
 // APP CONFIGURATION
 //=====================================================
 
-const app= express();
-
-const PORT= Number(process.env.PORT) || 5000;
+const app = express();
 
 //=====================================================
 // REQUIRED ENVIRONMENT VARIABLES
 //=====================================================
 
-// DATABASE_URL is used when deploying to Neon/PostgreSQL
-// or when your .env contains a PostgreSQL connection string.
-//
-// For local PostgreSQL you can alternatively use:
-// DB_USER
-// DB_HOST
-// DB_NAME
-// DB_PASS
-// DB_PORT
-
-const requiredEnv= [
-"EMAIL_USER",
-"EMAIL_PASS",
-"ENQUIRY_EMAIL",
+const requiredEnv = [
+  "DATABASE_URL",
+  "EMAIL_USER",
+  "EMAIL_PASS",
+  "ENQUIRY_EMAIL",
 ];
 
 for (const key of requiredEnv) {
-if (!process.env[key]) {
-console.error(`❌ Missing environment variable: ${key}`);
-process.exit(1);
-}
-}
-
-if (!process.env.DATABASE_URL) {
-const localDbVariables= [
-"DB_USER",
-"DB_HOST",
-"DB_NAME",
-"DB_PASS",
-"DB_PORT",
-];
-
-for (const key of localDbVariables) {
-if (!process.env[key]) {
-console.error(
-`❌ Missing database environment variable: ${key}`
-);
-process.exit(1);
-}
-}
+  if (!process.env[key]) {
+    throw new Error(`Missing environment variable: ${key}`);
+  }
 }
 
 //=====================================================
@@ -70,78 +38,45 @@ process.exit(1);
 //=====================================================
 
 app.use(
-cors({
-origin: true,
-credentials: true,
-})
+  cors({
+    origin: true,
+    credentials: true,
+  })
 );
 
 app.use(express.json({ limit: "10mb" }));
-
 app.use(express.urlencoded({ extended: true }));
 
 //=====================================================
-// EMAIL / SMTP
-//=====================================================
-//
-// IMPORTANT:
-// EMAIL_PASS must be a Google App Password,
-// NOT your normal Gmail password.
-//
-// Example:
-//
-// EMAIL_USER=yourgmail@gmail.com
-// EMAIL_PASS=abcdefghijklmnop
-// ENQUIRY_EMAIL=yourgmail@gmail.com
-//
+// EMAIL
 //=====================================================
 
-const transporter= nodemailer.createTransport({
-service: "gmail",
-
-auth: {
-user: process.env.EMAIL_USER,
-pass: process.env.EMAIL_PASS,
-},
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
-transporter.verify((error, success)=> {
-if (error) {
-console.error("❌ SMTP configuration error:");
-console.error(error.message);
-} else {
-console.log("✅ SMTP server is ready to send emails.");
-}
+//=====================================================
+// NEON POSTGRESQL
+//=====================================================
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 });
 
-let pool = new Pool({
-connectionString: process.env.DATABASE_URL,
-ssl: { rejectUnauthorized: false},
-max: 5,
-idleTimeoutMillis: 30000,
-connectionTimeoutMillis: 10000
-});
-
-// let pool;
-// if (process.env.DATABASE_URL) {
-// pool= new Pool({
-// connectionString: process.env.DATABASE_URL,
-// ssl: {rejectUnauthorized: false},
-// });
-// console.log("🔗 PostgreSQL configured using DATABASE_URL");
-// }else {
-// pool= new Pool({
-// user: process.env.DB_USER,
-// host: process.env.DB_HOST,
-// database: process.env.DB_NAME,
-// password: process.env.DB_PASS,
-// port: Number(process.env.DB_PORT) || 5432,
-// });
-
-// console.log("🔗 PostgreSQL configured using local DB variables");
-// }
+//=====================================================
+// CREATE TABLE
+//=====================================================
 
 let schemaReady = false;
+
 const createMembersTable = async () => {
   if (schemaReady) return;
 
@@ -157,557 +92,411 @@ const createMembersTable = async () => {
       remarks TEXT,
       "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    )
   `);
+
   schemaReady = true;
 };
 
 //=====================================================
-// DATABASE CONNECTION
+// DATABASE INITIALIZATION
 //=====================================================
 
-const connectDatabase= async ()=> {
-try {
-const client= await pool.connect();
+let initialized = false;
 
-console.log("✅ Connected to PostgreSQL Database");
+async function initialize() {
+  if (initialized) return;
 
-client.release();
+  const client = await pool.connect();
+  client.release();
 
-await createMembersTable();
-} catch (error) {
-console.error("❌ PostgreSQL connection failed");
-console.error(error.message);
+  await createMembersTable();
 
-throw error;
+  initialized = true;
+
+  console.log("✅ Connected to Neon PostgreSQL");
 }
-};
+
+app.use(async (req, res, next) => {
+  try {
+    await initialize();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 //=====================================================
 // HEALTH CHECK
 //=====================================================
 
-app.get("/api/health", async (req, res)=> {
-try {
-await pool.query("SELECT NOW()");
+app.get("/api/health", async (req, res) => {
+  try {
+    await pool.query("SELECT NOW()");
 
-res.status(200).json({
-success: true,
-message: "Backend and PostgreSQL are working",
-database:
-process.env.DB_NAME ||
-"Connected through DATABASE_URL",
-});
-} catch (error) {
-console.error("Health check error:", error);
-
-res.status(500).json({
-success: false,
-message: "Database connection failed",
-error: error.message,
-});
-}
+    res.json({
+      success: true,
+      message: "Backend and PostgreSQL are working",
+      database: "Connected through DATABASE_URL",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+      error: error.message,
+    });
+  }
 });
 
 //=====================================================
-// COMMERCIAL API
+// COMMERCIAL
 //=====================================================
 
-app.get("/api/commercial", (req, res)=> {
-res.status(200).json({
-success: true,
-
-enabled: true,
-
-// Configuration only.
-// The actual video is imported by Home.jsx.
-
-videoUrl: "/src/assets/videos/commercial.mp4",
-
-duration: 10,
-
-triggers: [
-5,
-10,
-15,
-],
-});
+app.get("/api/commercial", (req, res) => {
+  res.json({
+    success: true,
+    enabled: true,
+    videoUrl: "/src/assets/videos/commercial.mp4",
+    duration: 10,
+    triggers: [5, 10, 15],
+  });
 });
 
 //=====================================================
-// GET CURRENT MONTH BIRTHDAY CELEBRANTS
+// BIRTHDAYS
 //=====================================================
 
-app.get("/api/members/birthdays", async (req, res)=> {
-try {
-const result= await pool.query(`
-SELECT
-id,
-"fullName",
-gender,
-location,
-"dateOfBirth",
-contacts,
-remarks,
+app.get("/api/members/birthdays", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        id,
+        "fullName",
+        gender,
+        location,
+        "dateOfBirth",
+        contacts,
+        remarks,
+        EXTRACT(YEAR FROM AGE(CURRENT_DATE,"dateOfBirth"))::INTEGER AS age
+      FROM members
+      WHERE "dateOfBirth" IS NOT NULL
+        AND EXTRACT(MONTH FROM "dateOfBirth") = EXTRACT(MONTH FROM CURRENT_DATE)
+      ORDER BY EXTRACT(DAY FROM "dateOfBirth"), "fullName"
+    `);
 
-EXTRACT(
-YEAR FROM AGE(
-CURRENT_DATE,
-"dateOfBirth"
-)
-)::INTEGER AS age
-
-FROM members
-
-WHERE
-"dateOfBirth" IS NOT NULL
-
-AND EXTRACT(
-MONTH FROM "dateOfBirth"
-)= EXTRACT(
-MONTH FROM CURRENT_DATE
-)
-
-ORDER BY
-EXTRACT(
-DAY FROM "dateOfBirth"
-) ASC,
-
-"fullName" ASC
-`);
-
-res.status(200).json({
-success: true,
-
-month: new Date().toLocaleString(
-"en-US",
-{
-month: "long",
-}
-),
-
-count: result.rows.length,
-
-birthdays: result.rows,
-});
-} catch (error) {
-console.error(
-"GET birthday members error:",
-error
-);
-
-res.status(500).json({
-success: false,
-
-message:
-"Failed to retrieve birthday celebrants",
-
-error: error.message,
-});
-}
+    res.json({
+      success: true,
+      month: new Date().toLocaleString("en-US", { month: "long" }),
+      count: result.rows.length,
+      birthdays: result.rows,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve birthday celebrants",
+      error: error.message,
+    });
+  }
 });
 
 //=====================================================
-// GET ALL MEMBERS
+// GET MEMBERS
 //=====================================================
 
-app.get("/api/members", async (req, res)=> {
-try {
-const result= await pool.query(`
-SELECT *
-FROM members
-ORDER BY id DESC
-`);
+app.get("/api/members", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT *
+      FROM members
+      ORDER BY id DESC
+    `);
 
-res.status(200).json({
-success: true,
-members: result.rows,
-});
-} catch (error) {
-console.error(
-"GET members error:",
-error
-);
-
-res.status(500).json({
-success: false,
-error: error.message,
-});
-}
+    res.json({
+      success: true,
+      members: result.rows,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
 //=====================================================
-// GET MEMBER BY ID
+// GET MEMBER
 //=====================================================
 
-app.get("/api/members/:id", async (req, res)=> {
-const { id }= req.params;
+app.get("/api/members/:id", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM members WHERE id=$1`,
+      [req.params.id]
+    );
 
-try {
-const result= await pool.query(
-`
-SELECT *
-FROM members
-WHERE id= $1
-`,
-[id]
-);
+    if (!result.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
 
-if (result.rows.length=== 0) {
-return res.status(404).json({
-success: false,
-message: "Member not found",
-});
-}
-
-res.status(200).json({
-success: true,
-member: result.rows[0],
-});
-} catch (error) {
-console.error(
-"GET member error:",
-error
-);
-
-res.status(500).json({
-success: false,
-error: error.message,
-});
-}
+    res.json({
+      success: true,
+      member: result.rows[0],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
 //=====================================================
 // CREATE MEMBER
 //=====================================================
 
-app.post("/api/members", async (req, res)=> {
-console.log("\n=================================");
-console.log("📥 POST /api/members");
-console.log("📦 Received body:", req.body);
-console.log("=================================");
+app.post("/api/members", async (req, res) => {
+  const {
+    fullName,
+    gender,
+    location,
+    dateOfBirth,
+    dateOfEntry,
+    contacts,
+    remarks,
+  } = req.body;
 
-const {
-fullName,
-gender,
-location,
-dateOfBirth,
-dateOfEntry,
-contacts,
-remarks,
-}= req.body;
+  if (!fullName || !gender || !dateOfEntry) {
+    return res.status(400).json({
+      success: false,
+      message: "Full name, gender and date of entry are required",
+    });
+  }
 
-// ---------------------------------------------------
-// VALIDATION
-// ---------------------------------------------------
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO members(
+        "fullName",
+        gender,
+        location,
+        "dateOfBirth",
+        "dateOfEntry",
+        contacts,
+        remarks
+      )
+      VALUES($1,$2,$3,$4,$5,$6,$7)
+      RETURNING *
+      `,
+      [
+        fullName.trim(),
+        gender,
+        location?.trim() || null,
+        dateOfBirth || null,
+        dateOfEntry,
+        contacts?.trim() || null,
+        remarks?.trim() || null,
+      ]
+    );
 
-if (!fullName || !gender || !dateOfEntry
-){console.log("❌ Required fields missing");
-return res.status(400).json({
-success: false,
-message: "Full name, gender and date of entry are required",
+    res.status(201).json({
+      success: true,
+      message: "Membership details saved successfully!",
+      member: result.rows[0],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
-}
-
-try {
-// -------------------------------------------------
-// SHOW CURRENT DATABASE
-// -------------------------------------------------
-
-const dbInfo= await pool.query(`SELECT current_database() AS database`);
-console.log("🗄️ Current PostgreSQL database:", dbInfo.rows[0].database);
-console.log("📝 Inserting into table: members");
-
-const result= await pool.query(
-`
-INSERT INTO members (
-"fullName",
-gender,
-location,
-"dateOfBirth",
-"dateOfEntry",
-contacts,
-remarks
-)
-
-VALUES (
-$1,
-$2,
-$3,
-$4,
-$5,
-$6,
-$7
-)
-
-RETURNING *
-`,
-[
-fullName.trim(),
-gender,
-location?.trim() || null,
-dateOfBirth || null,
-dateOfEntry,
-contacts?.trim() || null,
-remarks?.trim() || null,
-]
-);
-
-console.log("✅ PostgreSQL INSERT successful");
-console.log("✅ Inserted member:", result.rows[0]);
-res.status(201).json({
-success: true,
-message: "Membership details saved successfully!",
-member: result.rows[0],
-});
-}catch(error){
-console.error("❌ PostgreSQL INSERT ERROR");
-console.error(error);
-res.status(500).json({
-success: false,
-
-error: error.message,
-});
-}
-});
-
-const escapeHtml= (value= "")=> {
-return String(value)
-.replace(/&/g, "&amp;")
-.replace(/</g, "&lt;")
-.replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;")
-.replace(/'/g, "&#039;");
-};
 
 //=====================================================
-// SEND ENQUIRY EMAIL
+// UPDATE MEMBER
 //=====================================================
 
-app.post("/api/send-enquiry", async (req, res)=> {
-try {
-const {message, whatsappCaption}= req.body;
-if (!message || typeof message !== "string" || !message.trim()){
-return res.status(400).json({success: false, message:
-"Enquiry message is required."});
-}
+app.put("/api/members/:id", async (req, res) => {
+  const {
+    fullName,
+    gender,
+    location,
+    dateOfBirth,
+    dateOfEntry,
+    contacts,
+    remarks,
+  } = req.body;
 
-const emailMessage= message.trim();
-const whatsappMessage= typeof whatsappCaption=== "string" && whatsappCaption.trim() ? whatsappCaption.trim() : emailMessage;
-const safeEmailMessage= escapeHtml(emailMessage);
-const safeWhatsappMessage= escapeHtml(whatsappMessage);
+  if (!fullName || !gender || !dateOfEntry) {
+    return res.status(400).json({
+      success: false,
+      message: "Full name, gender and date of entry are required",
+    });
+  }
 
-await transporter.sendMail({
-from: `"Answered Prayer Network" <${process.env.EMAIL_USER}>`,
-to: process.env.ENQUIRY_EMAIL,
-subject: "New Church Website Enquiry",
-text: `${emailMessage}
-WhatsApp Caption:
-${whatsappMessage}`,
-html: `
-<div
-style="
-font-family: Arial, sans-serif;
-line-height: 1.6;
-color: #222;
-"
->
-<h2>
-New Church Website Enquiry
-</h2>
-<p>
-${safeEmailMessage}
-</p>
-<hr />
-<p>
-<strong>
-WhatsApp Caption:
-</strong>
-</p>
-<p>
-${safeWhatsappMessage}
-</p>
-</div>
-`,
-});
-console.log("✅ Enquiry email sent successfully.");
-return res.status(200).json({
-success: true,
-message: "Enquiry sent successfully to email.",
-whatsappCaption: whatsappMessage});
-} catch (error){console.error("❌ Send enquiry error:",error);
-return res.status(500).json({
-success: false, message: "Failed to send enquiry.",
-error: error.message,
-});
-}
-});
+  try {
+    const result = await pool.query(
+      `
+      UPDATE members
+      SET
+        "fullName"=$1,
+        gender=$2,
+        location=$3,
+        "dateOfBirth"=$4,
+        "dateOfEntry"=$5,
+        contacts=$6,
+        remarks=$7,
+        "updatedAt"=CURRENT_TIMESTAMP
+      WHERE id=$8
+      RETURNING *
+      `,
+      [
+        fullName.trim(),
+        gender,
+        location?.trim() || null,
+        dateOfBirth || null,
+        dateOfEntry,
+        contacts?.trim() || null,
+        remarks?.trim() || null,
+        req.params.id,
+      ]
+    );
 
-app.put("/api/members/:id", async (req, res)=> {
-const { id }= req.params;
-const {
-fullName,
-gender,
-location,
-dateOfBirth,
-dateOfEntry,
-contacts,
-remarks,
-}= req.body;
+    if (!result.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
 
-// ---------------------------------------------------
-// VALIDATION
-// ---------------------------------------------------
-
-if (
-!fullName ||
-!gender ||
-!dateOfEntry
-) {
-return res.status(400).json({
-success: false,
-
-message:
-"Full name, gender and date of entry are required",
-});
-}
-
-try {
-const result= await pool.query(
-`
-UPDATE members
-
-SET
-"fullName"= $1,
-gender= $2,
-location= $3,
-"dateOfBirth"= $4,
-"dateOfEntry"= $5,
-contacts= $6,
-remarks= $7,
-"updatedAt"= CURRENT_TIMESTAMP
-
-WHERE id= $8
-
-RETURNING *
-`,
-[
-fullName.trim(),
-
-gender,
-
-location?.trim() || null,
-
-dateOfBirth || null,
-
-dateOfEntry,
-
-contacts?.trim() || null,
-
-remarks?.trim() || null,
-
-id,
-]
-);
-
-if (result.rows.length=== 0) {
-return res.status(404).json({
-success: false,
-
-message: "Member not found",
-});
-}
-
-res.status(200).json({
-success: true,
-
-message:
-"Member updated successfully!",
-
-member: result.rows[0],
-});
-} catch (error) {
-console.error(
-"PUT member error:",
-error
-);
-
-res.status(500).json({
-success: false,
-
-error: error.message,
-});
-}
+    res.json({
+      success: true,
+      message: "Member updated successfully!",
+      member: result.rows[0],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
-app.delete("/api/members/:id", async (req, res)=> {
-const { id }= req.params;
-try {
-const result= await pool.query(
-`
-DELETE FROM members
+//=====================================================
+// DELETE MEMBER
+//=====================================================
 
-WHERE id= $1
+app.delete("/api/members/:id", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM members WHERE id=$1 RETURNING *`,
+      [req.params.id]
+    );
 
-RETURNING *
-`,
-[id]
-);
+    if (!result.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
 
-if (result.rows.length=== 0) {
-return res.status(404).json({
-success: false,
-
-message: "Member not found",
-});
-}
-
-res.status(200).json({
-success: true,
-
-message:
-"Member deleted successfully!",
-
-member: result.rows[0],
-});
-} catch (error) {
-console.error(
-"DELETE member error:",
-error
-);
-
-res.status(500).json({
-success: false,
-
-error: error.message,
-});
-}
+    res.json({
+      success: true,
+      message: "Member deleted successfully!",
+      member: result.rows[0],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
+//=====================================================
+// ENQUIRY
+//=====================================================
 
-app.use((req, res)=> {res.status(404).json({
-success: false, message: "Route not found"});
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+app.post("/api/send-enquiry", async (req, res) => {
+  try {
+    const { message, whatsappCaption } = req.body;
+
+    if (!message?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Enquiry message is required.",
+      });
+    }
+
+    const emailMessage = message.trim();
+    const whatsappMessage =
+      whatsappCaption?.trim() || emailMessage;
+
+    await transporter.sendMail({
+      from: `"Answered Prayer Network" <${process.env.EMAIL_USER}>`,
+      to: process.env.ENQUIRY_EMAIL,
+      subject: "New Church Website Enquiry",
+      text: `${emailMessage}\n\nWhatsApp Caption:\n${whatsappMessage}`,
+      html: `
+        <h2>New Church Website Enquiry</h2>
+        <p>${escapeHtml(emailMessage)}</p>
+        <hr/>
+        <p><strong>WhatsApp Caption:</strong></p>
+        <p>${escapeHtml(whatsappMessage)}</p>
+      `,
+    });
+
+    res.json({
+      success: true,
+      message: "Enquiry sent successfully to email.",
+      whatsappCaption: whatsappMessage,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to send enquiry.",
+      error: error.message,
+    });
+  }
 });
 
-app.use((error, req, res, next)=> {
-console.error("❌ Global server error:",error);
-res.status(500).json({
-success: false,
-message: "Internal server error",
-error: error.message,
-});
+//=====================================================
+// 404
+//=====================================================
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+  });
 });
 
-let initialized = false;
-async function initialize() {
-if (initialized) return;
-await connectDatabase();
-initialized = true;
-}
+//=====================================================
+// ERROR HANDLER
+//=====================================================
 
-app.use(async (req, res, next) => {
-try {await initialize(); next();
-}catch(err){next(err)}
+app.use((error, req, res, next) => {
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+    error: error.message,
+  });
 });
+
+//=====================================================
+// EXPORT FOR VERCEL
+//=====================================================
 
 export default app;
