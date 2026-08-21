@@ -13,6 +13,36 @@ contacts: "",
 remarks: "",
 };
 
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
+const fetchJSON = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text();
+    console.error("Non-JSON response:", text.substring(0, 200));
+    throw new Error(
+      "Backend API is not reachable. Vercel returned HTML instead of JSON."
+    );
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.message || `Request failed (${response.status})`
+    );
+  }
+
+  return data;
+};
 const MembersDashboard = () => {
 const navigate = useNavigate();
 const [members, setMembers] = useState([]);
@@ -35,24 +65,21 @@ const [sendingEnquiry, setSendingEnquiry] = useState(false);
 // ==========================================
 
 const checkHealth = async () => {
-setLoadingHealth(true);
+  setLoadingHealth(true);
 
-try {
-const response = await fetch("/api/health");
+  try {
+    const result = await fetchJSON("/health");
 
-const result = await response.json();
-
-setBackendStatus(result);
-
-} catch (error) {
-setBackendStatus({
-success: false,
-message: "Backend is not reachable",
-error: error.message,
-});
-} finally {
-setLoadingHealth(false);
-}
+    setBackendStatus(result);
+  } catch (error) {
+    setBackendStatus({
+      success: false,
+      message: "Backend is not reachable",
+      error: error.message,
+    });
+  } finally {
+    setLoadingHealth(false);
+  }
 };
 
 // ==========================================
@@ -60,36 +87,33 @@ setLoadingHealth(false);
 // ==========================================
 
 const fetchMembers = async () => {
-setLoadingMembers(true);
+  setLoadingMembers(true);
 
-try {
-const response = await fetch("/api/members");
+  try {
+    const result = await fetchJSON("/members");
 
-const result = await response.json();
+    const normalizedMembers = (result.members || []).map((member) => ({
+      ...member,
+      fullName: member.fullName ?? member.fullname,
+      dateOfBirth: member.dateOfBirth ?? member.dateofbirth,
+      dateOfEntry: member.dateOfEntry ?? member.dateofentry,
+      createdAt: member.createdAt ?? member.createdat,
+      updatedAt: member.updatedAt ?? member.updatedat,
+    }));
 
-if (!response.ok) {
-throw new Error(
-result?.error ||
-result?.message ||
-"Failed to load members"
-);
-}
+    setMembers(normalizedMembers);
+  } catch (error) {
+    console.error("GET members error:", error);
 
-setMembers(result.members || []);
-
-} catch (error) {
-console.error("GET members error:", error);
-
-Swal.fire({
-icon: "error",
-title: "Unable to Load Members",
-text: error.message,
-confirmButtonColor: "#04732d",
-});
-
-} finally {
-setLoadingMembers(false);
-}
+    Swal.fire({
+      icon: "error",
+      title: "Unable to Load Members",
+      text: error.message,
+      confirmButtonColor: "#04732d",
+    });
+  } finally {
+    setLoadingMembers(false);
+  }
 };
 
 // ==========================================
@@ -189,27 +213,14 @@ remarks: formData.remarks.trim(),
 };
 
 try {
-const response = await fetch(
-`/api/members/${selectedMember.id}`,
-{
-method: "PUT",
-headers: {
-"Content-Type": "application/json",
-Accept: "application/json",
-},
-body: JSON.stringify(payload),
-}
-);
-
-const result = await response.json();
-
-if (!response.ok) {
-throw new Error(
-result?.error ||
-result?.message ||
-`Update failed with status ${response.status}`
-);
-}
+const result = await fetchJSON(`/members/${selectedMember.id}`, {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  },
+  body: JSON.stringify(payload),
+});
 
 Swal.fire({
 icon: "success",
@@ -265,29 +276,15 @@ cancelButtonText: "Cancel",
 if (!confirmation.isConfirmed) {
 return;
 }
-
 setDeletingId(id);
 
 try {
-const response = await fetch(
-`/api/members/${id}`,
-{
-method: "DELETE",
-headers: {
-Accept: "application/json",
-},
-}
-);
-
-const result = await response.json();
-
-if (!response.ok) {
-throw new Error(
-result?.error ||
-result?.message ||
-`Delete failed with status ${response.status}`
-);
-}
+const result = await fetchJSON(`/members/${id}`, {
+  method: "DELETE",
+  headers: {
+    Accept: "application/json",
+  },
+});
 
 Swal.fire({
 icon: "success",
@@ -324,7 +321,6 @@ setDeletingId(null);
 // ==========================================
 // POST /api/send-enquiry
 // ==========================================
-
 const handleSendEnquiry = async (e) => {
 e.preventDefault();
 
@@ -335,52 +331,30 @@ title: "Message Required",
 text: "Please enter an enquiry message.",
 confirmButtonColor: "#04732d",
 });
-
 return;
 }
-
 setSendingEnquiry(true);
 
 try {
-const response = await fetch(
-"/api/send-enquiry",
-{
-method: "POST",
-headers: {
-"Content-Type": "application/json",
-Accept: "application/json",
-},
-body: JSON.stringify({
-message: enquiry.trim(),
-}),
-}
-);
-const result = await response.json();
+const result = await fetchJSON("/send-enquiry", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  },
+  body: JSON.stringify({
+    message: enquiry.trim(),
+  }),
+});
 
-if (!response.ok) {
-throw new Error(
-result?.error ||
-result?.message ||
-`Request failed with status ${response.status}`
-);
-}
 const whatsappNumber = "233548099730";
 const whatsappMessage = encodeURIComponent(
-`🔔 NEW CHURCH WEBSITE ENQUIRY\n\n${enquiry.trim()}\n\n📍 Source: Church Website`
-);
-const whatsappUrl =
-`https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
-// Open WhatsApp Web in a new tab
-window.open(
-whatsappUrl,
-"_blank",
-"noopener,noreferrer"
-);
-Swal.fire({
-icon: "success",
+result.whatsappCaption || `🔔 NEW CHURCH WEBSITE ENQUIRY\n\n${enquiry.trim()}\n\n📍 Source: Church Website`);
+const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
+window.open(whatsappUrl, "_blank","noopener,noreferrer");
+Swal.fire({icon: "success",
 title: "Enquiry Sent",
-text:
-"The enquiry was sent by email and WhatsApp has been opened with the message ready to send.",
+text: "The enquiry was sent by email and WhatsApp has been opened with the message ready to send.",
 confirmButtonColor: "#04732d",
 });
 
@@ -403,13 +377,10 @@ confirmButtonColor: "#d33",
 setSendingEnquiry(false);
 }
 };
+
 const formatDate = (date) => {
-if (!date) {
-return "-";
-}
-
+if (!date) return "-";
 const value = String(date).substring(0, 10);
-
 return value;
 };
 
